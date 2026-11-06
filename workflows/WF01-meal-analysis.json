@@ -1,0 +1,1058 @@
+{
+  "name": "Nutrition Coach | WF01-meal-analysis",
+  "nodes": [
+    {
+      "id": "9456e33a-6fb6-4c7f-abb8-02ffec5c8597",
+      "name": "手動測試",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_MEAL_INTAKE_GID",
+          "mode": "id"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "70af32de-4fa0-4b4f-b415-9fbe78b81a54",
+      "name": "Google Form → Meal_Intake 新增列"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item,index)=>{\nconst raw=item.json;\nconst s=v=>String(v??'').trim();\nconst id=s(raw.submission_id), client=s(raw.client_id), date=s(raw.meal_date).slice(0,10);\nconst parsed=new Date(date+'T00:00:00Z');\nconst dateValid=Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===date;\nconst valid=client.startsWith('TEST-')&&dateValid&&/^[A-Za-z0-9_-]{3,80}$/.test(id)&&/^[A-Za-z0-9_-]{3,80}$/.test(client)&&/^\\d{4}-\\d{2}-\\d{2}$/.test(date)&&!!s(raw.meal_type)&&(!!s(raw.meal_text)||!!s(raw.photo_drive_url));\nconst u=s(raw.photo_drive_url);let photoFileId='';\nif(u){let m=u.match(/\\/d\\/([A-Za-z0-9_-]{15,})/)||u.match(/[?&]id=([A-Za-z0-9_-]{15,})/)||u.match(/(?:^|\\s)([A-Za-z0-9_-]{25,})(?:\\s|$)/); photoFileId=m?m[1]:'';}\nconst validPhoto=!u||!!photoFileId;\nreturn {pairedItem:{item:index},json:{...raw,submission_id:id,client_id:client,meal_date:date,photo_file_id:photoFileId,valid:valid&&validPhoto,error:!valid?'缺少有效的 submission_id、client_id、meal_date、meal_type 或文字／照片':(!validPhoto?'照片必須是可讀取的 Google Drive 檔案連結':'')}};\n});",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "8ac2604b-57b2-4dd5-9e77-b0dae9126165",
+      "name": "檢查輸入資料"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f9955127-1fc7-4df2-b62b-5d6490f20f93",
+              "leftValue": "={{ String($json.valid) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        450,
+        0
+      ],
+      "id": "21e1536b-de9e-4a7b-99dc-72765c6b66c4",
+      "name": "輸入完整才繼續"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Meals",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "submission_id",
+              "lookupValue": "={{ $('檢查輸入資料').item.json.submission_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        680,
+        -80
+      ],
+      "id": "e0c7b287-0124-4276-ad7d-6d618ea2d153",
+      "name": "查 Meals 是否已處理過",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "110cff73-e6e2-466a-8476-babb313eca36",
+              "leftValue": "={{ $json.submission_id ? \"no\" : \"yes\" }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        900,
+        -80
+      ],
+      "id": "6e5e5d95-bffc-44fe-848c-5c790bbb51fa",
+      "name": "是新紀錄嗎"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clients",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "client_id",
+              "lookupValue": "={{ $('檢查輸入資料').item.json.client_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1120,
+        -170
+      ],
+      "id": "46e6eb18-ca2b-49ae-9ffe-6c4a2172ab56",
+      "name": "取得該客戶八週目標",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const meal=$('檢查輸入資料').itemMatching(0).json;\nconst client=$input.first().json;\nif(!client.client_id) return [{json:{...meal,client_found:false,error:'Clients 查無該 client_id。請先完成八週課程建檔。'}}];\nconst safe=v=>String(v??'').trim();\nconst prompt=[\n'你是營養教練的草稿助理；所有資料僅供測試，不可自行對客戶發送。僅使用可證實資訊，以繁體中文回應。',\n'客戶的8週目標：'+safe(client.goal_text),'目標類型：'+safe(client.goal_type),'本週追蹤指標：'+safe(client.goal_rule),\n'餐別：'+safe(meal.meal_type),'餐點文字：'+safe(meal.meal_text),'是否吃完（自述）：'+safe(meal.ate_all),'實際份量自述：'+safe(meal.portion_notes),\n'照片內容只能說明可見食物，不能據此斷言個案吃了、吃完、實際份量、食材細節或營養數字。',\n'不得猜想含糖飲料、油量、體重變化、血糖、疾病、用藥或心理狀態；沒有說明就是未知。',\n'回覆必須針對這位客戶的原始目標，提出一項具體、溫和、可執行的下一餐建議，不做醫療診斷。',\n'goal_alignment 只能填：可觀察支持、部分支持、資料不足；不要用它計算減脂或健康成果百分比。',\n'輸出 observed_foods,goal_alignment,ai_coach_assessment,missing_info,ai_client_draft（約80-160字）、issue_flags 字串，不要包含Markdown或個資。'\n].join('\\n');\nreturn [{json:{...meal,client_goal:safe(client.goal_text),goal_rule:safe(client.goal_rule),client_found:true,analysis_prompt:prompt}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1330,
+        -170
+      ],
+      "id": "b0a5b5a5-a1a7-449d-9683-0cccfd2095a7",
+      "name": "結合客戶目標及餐點"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cb326069-43cd-4434-b6f1-2123a38b0276",
+              "leftValue": "={{ String($json.client_found) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1540,
+        -170
+      ],
+      "id": "eaafa79f-2eba-4793-be23-f30ebb62706b",
+      "name": "客戶存在？"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cc5e09bd-bf1d-44d2-8f41-9eaf46b1599a",
+              "leftValue": "={{ $json.photo_file_id ? \"yes\" : \"no\" }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        -280
+      ],
+      "id": "6f8ef2c9-0f7c-4074-aa9a-8498c749ebbe",
+      "name": "有照片？"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://www.googleapis.com/drive/v3/files/\"+$json.photo_file_id+\"?alt=media\" }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1960,
+        -400
+      ],
+      "id": "de9ec7e8-d0db-4559-86a4-9b5fd4ebb807",
+      "name": "Google Drive 下載照片"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "binaryPropertyName": "data",
+        "destinationKey": "image_base64",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        2170,
+        -400
+      ],
+      "id": "19aa32c5-b86f-426e-8c8f-21b1bb989a8f",
+      "name": "照片轉 Base64"
+    },
+    {
+      "parameters": {
+        "jsCode": "const context=$('結合客戶目標及餐點').itemMatching(0).json;\nconst base64=String($input.first().json.image_base64??'');\nif(!base64) throw new Error('Google Drive 檔案沒有產生 image_base64');\nconst mime=base64.startsWith('iVBORw0KGgo')?'image/png':base64.startsWith('UklGR')?'image/webp':'image/jpeg';\nconst schema={type:'object',properties:{observed_foods:{type:'string'},goal_alignment:{type:'string'},ai_coach_assessment:{type:'string'},missing_info:{type:'string'},ai_client_draft:{type:'string'},issue_flags:{type:'string'}},required:['observed_foods','goal_alignment','ai_coach_assessment','missing_info','ai_client_draft','issue_flags']};\nreturn [{json:{requestBody:{contents:[{parts:[{text:context.analysis_prompt},{inline_data:{mime_type:mime,data:base64}}]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:schema}}}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2390,
+        -400
+      ],
+      "id": "d68067ae-ac37-4c7a-b81b-b6a2498ad519",
+      "name": "組合照片 Gemini 請求"
+    },
+    {
+      "parameters": {
+        "jsCode": "const context=$input.first().json;\nconst schema={type:'object',properties:{observed_foods:{type:'string'},goal_alignment:{type:'string'},ai_coach_assessment:{type:'string'},missing_info:{type:'string'},ai_client_draft:{type:'string'},issue_flags:{type:'string'}},required:['observed_foods','goal_alignment','ai_coach_assessment','missing_info','ai_client_draft','issue_flags']};\nreturn [{json:{requestBody:{contents:[{parts:[{text:context.analysis_prompt+'\\n沒有照片，僅根據客戶手動提供的文字分析。'}]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:schema}}}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        -140
+      ],
+      "id": "c008a3b1-4bac-4731-828e-ceca2d01c5e2",
+      "name": "組合文字 Gemini 請求"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2600,
+        -270
+      ],
+      "id": "892fe451-4e88-42f5-8b48-2948777625d9",
+      "name": "Gemini 逐餐分析（文字或照片）",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig=$('結合客戶目標及餐點').itemMatching(0).json;\nlet ai={},error='';\ntry { const text=String($input.first().json.candidates?.[0]?.content?.parts?.[0]?.text??'').replace(/^```(?:json)?\\s*/i,'').replace(/```\\s*$/,'').trim(); ai=JSON.parse(text); }\ncatch(e){error='Gemini 回傳格式無法解析：'+e.message;}\nconst clean=v=>String(v??'').replace(/\\\\n/g,'\\n').trim();\nconst output={submission_id:orig.submission_id,client_id:orig.client_id,meal_date:orig.meal_date,meal_type:orig.meal_type,meal_text:orig.meal_text??'',photo_drive_url:orig.photo_drive_url??'',ate_all:orig.ate_all??'',portion_notes:orig.portion_notes??'',client_goal:orig.client_goal,\n observed_foods:clean(ai.observed_foods),goal_alignment:clean(ai.goal_alignment)||'資料不足',ai_coach_assessment:clean(ai.ai_coach_assessment),missing_info:clean(ai.missing_info),ai_client_draft:clean(ai.ai_client_draft),coach_approved_text:'',coach_goal_met:'待確認',review_status:'待教練審核',manually_replied_at:'',processing_status:error?'AI錯誤_需人工處理':'AI草稿待教練審核',issue_flags:clean(ai.issue_flags)+(error?'\\n'+error:''),created_at:new Date().toISOString()};\nconst unsupported=/(達成|達標|落實|做到|完成|符合.{0,15}目標|完美|每天.{0,20}都)/.test(output.ai_client_draft);\nif(unsupported){\n output.ai_coach_assessment+='\\n[輸出檢查] 原始客戶草稿含未經人工核實的達標敘述，已改為保守回饋。';\n output.ai_client_draft='已收到這餐紀錄。針對你設定的「'+orig.client_goal+'」，下次可以補充與目標相關的食物、實際吃了多少，以及是否吃完，讓我們更清楚追蹤進度。這次紀錄是否符合目標，仍需由教練核實；照片或文字中出現某項食物，不代表已確認實際攝取量。';\n output.issue_flags+='\\nunsupported_goal_claim_replaced';\n}\n// 先只預覽；確認資料權限及測試後，將此行改成 false 才能寫入測試表。\nconst PREVIEW_ONLY=true;\nreturn [{json:{...output,allow_write:!PREVIEW_ONLY&&!error&&!!output.ai_client_draft}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2820,
+        -270
+      ],
+      "id": "9f8fe5ae-ec7c-4517-bdf1-09faa08f3f15",
+      "name": "整理逐餐 AI 草稿（永遠待審核）"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0a65c30f-4792-429a-8425-32fa5d58ccda",
+              "leftValue": "={{ String($json.allow_write) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3050,
+        -270
+      ],
+      "id": "61d5c734-94e1-4bbf-97e5-88b6a2835f12",
+      "name": "是否允許寫入 Meals（預設否）"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Meals",
+          "mode": "name"
+        },
+        "operation": "append",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submission_id": "={{ $json.submission_id }}",
+            "client_id": "={{ $json.client_id }}",
+            "meal_date": "={{ $json.meal_date }}",
+            "meal_type": "={{ $json.meal_type }}",
+            "meal_text": "={{ $json.meal_text }}",
+            "photo_drive_url": "={{ $json.photo_drive_url }}",
+            "ate_all": "={{ $json.ate_all }}",
+            "portion_notes": "={{ $json.portion_notes }}",
+            "client_goal": "={{ $json.client_goal }}",
+            "observed_foods": "={{ $json.observed_foods }}",
+            "goal_alignment": "={{ $json.goal_alignment }}",
+            "ai_coach_assessment": "={{ $json.ai_coach_assessment }}",
+            "missing_info": "={{ $json.missing_info }}",
+            "ai_client_draft": "={{ $json.ai_client_draft }}",
+            "coach_approved_text": "={{ $json.coach_approved_text }}",
+            "coach_goal_met": "={{ $json.coach_goal_met }}",
+            "review_status": "={{ $json.review_status }}",
+            "manually_replied_at": "={{ $json.manually_replied_at }}",
+            "processing_status": "={{ $json.processing_status }}",
+            "issue_flags": "={{ $json.issue_flags }}",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "submission_id",
+              "displayName": "submission_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_id",
+              "displayName": "client_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "meal_date",
+              "displayName": "meal_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "meal_type",
+              "displayName": "meal_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "meal_text",
+              "displayName": "meal_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "photo_drive_url",
+              "displayName": "photo_drive_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ate_all",
+              "displayName": "ate_all",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "portion_notes",
+              "displayName": "portion_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_goal",
+              "displayName": "client_goal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "observed_foods",
+              "displayName": "observed_foods",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "goal_alignment",
+              "displayName": "goal_alignment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_coach_assessment",
+              "displayName": "ai_coach_assessment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "missing_info",
+              "displayName": "missing_info",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_client_draft",
+              "displayName": "ai_client_draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "coach_approved_text",
+              "displayName": "coach_approved_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "coach_goal_met",
+              "displayName": "coach_goal_met",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_status",
+              "displayName": "review_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "manually_replied_at",
+              "displayName": "manually_replied_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "issue_flags",
+              "displayName": "issue_flags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3270,
+        -360
+      ],
+      "id": "2fe9a281-105d-4f5b-91d6-42ef5248ebc9",
+      "name": "新增或更新 Meals 草稿"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(it=>({json:{preview:true,client_id:it.json.client_id,meal_date:it.json.meal_date,meal_type:it.json.meal_type,ai_client_draft:it.json.ai_client_draft,goal_alignment:it.json.goal_alignment,missing_info:it.json.missing_info,message:'此工作流預設 PREVIEW_ONLY，不寫入 Google Sheets，不會傳送 nutrition。'}}));",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3270,
+        -130
+      ],
+      "id": "e9bf2be4-1e1f-4626-b1e3-3aaf3b0ea0a3",
+      "name": "安全預覽（不寫入、不發訊）"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(i=>({json:{error:i.json.error,submission_id:i.json.submission_id}}));",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        670,
+        140
+      ],
+      "id": "5bb6e369-03c6-4a32-ba1d-f0832e997f9f",
+      "name": "不完整輸入_停止"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(i=>({json:{skipped:true,reason:'此 submission_id 已在 Meals，避免覆寫教練回覆。'}}));",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        80
+      ],
+      "id": "b0d9a8f3-cf59-4e1c-b295-12af1f36df5f",
+      "name": "已分析過_停止"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(i=>({json:{error:i.json.error}}));",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        60
+      ],
+      "id": "241a759f-a2c9-4dd4-b946-d98c66c71cf4",
+      "name": "客戶尚未建檔_停止"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "cd05f9a6-16f5-4a5e-a9a1-e6671f8cabd1",
+      "name": "逐筆處理餐點",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Meal_Intake",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        300
+      ],
+      "id": "2c5f2c70-5a7f-4245-96e6-9e2e373a34e9",
+      "name": "讀取測試餐點輸入",
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Google Form → Meal_Intake 新增列": {
+      "main": [
+        [
+          {
+            "node": "檢查輸入資料",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "檢查輸入資料": {
+      "main": [
+        [
+          {
+            "node": "逐筆處理餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "輸入完整才繼續": {
+      "main": [
+        [
+          {
+            "node": "查 Meals 是否已處理過",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "不完整輸入_停止",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查 Meals 是否已處理過": {
+      "main": [
+        [
+          {
+            "node": "是新紀錄嗎",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是新紀錄嗎": {
+      "main": [
+        [
+          {
+            "node": "取得該客戶八週目標",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "已分析過_停止",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取得該客戶八週目標": {
+      "main": [
+        [
+          {
+            "node": "結合客戶目標及餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "結合客戶目標及餐點": {
+      "main": [
+        [
+          {
+            "node": "客戶存在？",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "客戶存在？": {
+      "main": [
+        [
+          {
+            "node": "有照片？",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "客戶尚未建檔_停止",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "有照片？": {
+      "main": [
+        [
+          {
+            "node": "Google Drive 下載照片",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "組合文字 Gemini 請求",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive 下載照片": {
+      "main": [
+        [
+          {
+            "node": "照片轉 Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "照片轉 Base64": {
+      "main": [
+        [
+          {
+            "node": "組合照片 Gemini 請求",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "組合照片 Gemini 請求": {
+      "main": [
+        [
+          {
+            "node": "Gemini 逐餐分析（文字或照片）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "組合文字 Gemini 請求": {
+      "main": [
+        [
+          {
+            "node": "Gemini 逐餐分析（文字或照片）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 逐餐分析（文字或照片）": {
+      "main": [
+        [
+          {
+            "node": "整理逐餐 AI 草稿（永遠待審核）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理逐餐 AI 草稿（永遠待審核）": {
+      "main": [
+        [
+          {
+            "node": "是否允許寫入 Meals（預設否）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否允許寫入 Meals（預設否）": {
+      "main": [
+        [
+          {
+            "node": "新增或更新 Meals 草稿",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "安全預覽（不寫入、不發訊）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "逐筆處理餐點": {
+      "main": [
+        [],
+        [
+          {
+            "node": "輸入完整才繼續",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "新增或更新 Meals 草稿": {
+      "main": [
+        [
+          {
+            "node": "逐筆處理餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "安全預覽（不寫入、不發訊）": {
+      "main": [
+        [
+          {
+            "node": "逐筆處理餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "不完整輸入_停止": {
+      "main": [
+        [
+          {
+            "node": "逐筆處理餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "已分析過_停止": {
+      "main": [
+        [
+          {
+            "node": "逐筆處理餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "客戶尚未建檔_停止": {
+      "main": [
+        [
+          {
+            "node": "逐筆處理餐點",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "手動測試": {
+      "main": [
+        [
+          {
+            "node": "讀取測試餐點輸入",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取測試餐點輸入": {
+      "main": [
+        [
+          {
+            "node": "檢查輸入資料",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Taipei",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none"
+  },
+  "tags": []
+}

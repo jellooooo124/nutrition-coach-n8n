@@ -1,0 +1,10 @@
+node_modules/
+.local/
+.env
+.env.*
+!.env.example
+*.sqlite*
+*.log
+.DS_Store
+reports/
+credentials*.json

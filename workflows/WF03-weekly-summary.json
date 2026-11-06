@@ -1,0 +1,607 @@
+{
+  "name": "Nutrition Coach | WF03-weekly-summary",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4e494435-3dba-40bc-aed9-63ae01cff517",
+      "name": "手動測試"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        170
+      ],
+      "id": "88150a68-e3eb-4496-8e9f-91645c3ef478",
+      "name": "排程（本機 n8n 啟用後才會運作）"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clients",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        230,
+        20
+      ],
+      "id": "624c6b30-eb72-4c64-9d39-54a03d3b4b4b",
+      "name": "讀取所有 Clients"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{clients_count:$input.all().length}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        20
+      ],
+      "id": "7128e83c-e2ad-4a5a-b3cc-8c58741103b2",
+      "name": "單次讀取保護"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Meals",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        650,
+        20
+      ],
+      "id": "1c51e8db-2f36-4a74-ac48-029314c34eb3",
+      "name": "讀取所有 Meals",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{meal_count:$input.all().filter(i=>i.json.submission_id).length}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        20
+      ],
+      "id": "dd4a0a3d-eb6b-4c49-892a-535e0e15e644",
+      "name": "單次讀取餐點保護"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly_Summaries",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1060,
+        20
+      ],
+      "id": "c2de215a-2b1a-4422-b1b8-2d3d8702a747",
+      "name": "讀取現有週總結避免覆寫已審核文字",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients=$('讀取所有 Clients').all().map(i=>i.json),meals=$('讀取所有 Meals').all().map(i=>i.json),existing=new Set($input.all().map(i=>String(i.json.summary_id||'')));\nconst asDate=s=>new Date(String(s||'').slice(0,10)+'T00:00:00Z');\nconst fmt=d=>d.toISOString().slice(0,10); const today=fmt(new Date(Date.now()+8*3600000));\n// 只在每位客戶課程起始日滿 7、14、...、56 天時產出新一週的總結。\nconst result=[];\nfor(const c of clients){\n if(!String(c.client_id||'').startsWith('TEST-'))continue;\n if(String(c.active||'').trim()!=='是'||!c.client_id||!c.course_start) continue;\n const days=Math.round((asDate(today)-asDate(c.course_start))/86400000);\n if(days<7||days>56||days%7!==0) continue;\n const weekNo=days/7, start=fmt(new Date(asDate(c.course_start).getTime()+(days-7)*86400000)),end=fmt(new Date(asDate(c.course_start).getTime()+(days-1)*86400000));\n const id='WEEK|'+c.client_id+'|'+weekNo;\n if(existing.has(id))continue;\n const eligible=meals.filter(r=>String(r.client_id)===String(c.client_id)&&r.meal_date>=start&&r.meal_date<=end);const m=[...new Map(eligible.map(r=>[String(r.meal_date)+'|'+String(r.meal_type),r])).values()];\n const daysWithLog=new Set(m.map(r=>r.meal_date));const expectedPerDay=Math.max(0,Number(c.daily_expected_meals)||0),goalTargetPerDay=Math.max(0,Number(c.daily_target_goal_meals)||0);\n const expected=expectedPerDay*7;const yes=m.filter(r=>String(r.coach_goal_met).trim()==='是').length,no=m.filter(r=>String(r.coach_goal_met).trim()==='否').length;\n const cov=expected?Math.min(100,Math.round(m.length/expected*100)):'';\n const goalTarget=goalTargetPerDay*7; const goalPct=goalTarget&&yes+no?Math.min(100,Math.round(yes/goalTarget*100)):'';\n const note=(daysWithLog.size<7?'本週有未上傳日期；':'')+(!goalTarget?'尚未設定可計數的目標；':yes+no===0?'缺少教練核實的目標判斷；':'目標達成率僅依教練核實為「是」的紀錄計算；未上傳不代表未達標。');\n const details=m.map(r=>[r.meal_date,r.meal_type,'餐點:'+String(r.meal_text||r.observed_foods||'未提供'), '教練核實:'+String(r.coach_goal_met||'待確認')].join(' / ')).slice(0,60).join('\\n');\n const prompt=['你是營養教練的內部八週追蹤輔助 AI。請用繁體中文總結個案第'+weekNo+'週('+start+' 至 '+end+')的飲食紀錄，對照其個人目標提供建議。','目標：'+String(c.goal_text||''),'具體追蹤指標：'+String(c.goal_rule||''),'本週記錄覆蓋率（不是減重達成率）：'+String(cov === '' ? '無法計算' : cov)+'%','依人工核實資料計算的目標進度：'+String(goalPct === '' ? '無法計算' : goalPct)+'%；'+note,'紀錄如下：\\n'+(details||'沒有上傳紀錄。'),'不得將未上傳推定為未達標、也不得推測體重變化或健康問題。請輸出 coach_summary（給教練，條列本週趨勢與缺失）與 ai_client_draft（給客戶約120-200字，正向且符合目標，僅為草稿）。'].join('\\n');\n const req={contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:{type:'object',properties:{coach_summary:{type:'string'},ai_client_draft:{type:'string'}},required:['coach_summary','ai_client_draft']}}};\n result.push({json:{summary_id:id,client_id:c.client_id,week_no:String(weekNo),week_start:start,week_end:end,goal_text:c.goal_text||'',expected_meals:String(expected),recorded_meals:String(m.length),coverage_pct:String(cov),goal_target_total:String(goalTarget),verified_goal_yes:String(yes),verified_goal_no:String(no),goal_achievement_pct:String(goalPct),metric_note:note,requestBody:req}});\n}\nreturn result;",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1270,
+        20
+      ],
+      "id": "c003a53d-b38e-4fa8-9e77-3c442d581826",
+      "name": "建構週總結分析素材"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1480,
+        20
+      ],
+      "id": "351d5938-5785-414e-9f68-a7153d407c92",
+      "name": "Gemini 撰寫週總結",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const from=$('建構週總結分析素材').all();\nreturn $input.all().map((i,index)=>{\n const original=from[index]?.json;if(!original)throw new Error('報表原始資料與 Gemini 回傳數量不一致');\n let obj={};try{obj=JSON.parse(String(i.json.candidates?.[0]?.content?.parts?.[0]?.text??'').replace(/^```(?:json)?\\s*/i,'').replace(/```\\s*$/,'').trim())}catch(e){throw new Error('總結 AI JSON 解析失敗：'+e.message)}\n let draft=String(obj.ai_client_draft??'');\n const unsafe=/(符合.{0,30}目標|達成率|達標|落實|感受身體|全部.{0,10}達|每天.{0,20}都|連續.{0,15}攝取|達成.{0,15}目標|成功達|已達標|專屬營養輔助 AI)/.test(draft);\n const period=original.report_date||String(original.week_start)+' 至 '+String(original.week_end);\n const coverage=original.coverage_pct===''?'無法計算':original.coverage_pct+'%';\n const target=original.daily_target_goal_meals||original.goal_target_total;\n const facts=period+'：目前收到 '+original.recorded_meals+' 餐紀錄，約定記錄 '+original.expected_meals+' 餐，記錄覆蓋率 '+coverage+'。教練已核實符合習慣指標的紀錄有 '+original.verified_goal_yes+' 餐；'+(original.goal_achievement_pct===''?'目前無法判定目標進度。':'相對設定的 '+target+' 餐目標，可核實進度為 '+original.goal_achievement_pct+'%。')+'未記錄或未核實的部分仍屬未知，這不是減脂或健康成果評分。';\n if(unsafe)draft='接下來可以從方便記錄的一餐開始，補充食物內容、實際份量及是否吃完；我們會依你的個人目標一起調整。';\n obj.ai_client_draft=facts+'\\n\\n'+draft;\n obj.coach_summary='[系統核對數據] '+facts+'\\n[AI 草稿，需人工核實] '+String(obj.coach_summary??'')+(unsafe?'\\n[輸出檢查] 客戶草稿中的過度肯定敘述已替換。':'');\n const {requestBody,...meta}=original;\n // 預設不寫入；準備好後由教練明確設定為 false。\n const PREVIEW_ONLY=true;\n return {json:{...meta,coach_summary:String(obj.coach_summary??''),ai_client_draft:String(obj.ai_client_draft??''),approved_text:'',review_status:'待教練審核',manually_replied_at:'',created_at:new Date().toISOString(),allow_write:!PREVIEW_ONLY}};\n});",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1710,
+        20
+      ],
+      "id": "59d8999f-5fa6-497a-86da-0e643a6ce8a0",
+      "name": "整理週報表與安全開關"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7552439c-9a49-4451-b369-318a0c497cb3",
+              "leftValue": "={{ String($json.allow_write) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1950,
+        20
+      ],
+      "id": "3e998684-5252-4f31-bf10-f368de878408",
+      "name": "寫入週報表？預設否"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly_Summaries",
+          "mode": "name"
+        },
+        "operation": "append",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "summary_id": "={{ $json.summary_id }}",
+            "client_id": "={{ $json.client_id }}",
+            "week_no": "={{ $json.week_no }}",
+            "week_start": "={{ $json.week_start }}",
+            "week_end": "={{ $json.week_end }}",
+            "goal_text": "={{ $json.goal_text }}",
+            "expected_meals": "={{ $json.expected_meals }}",
+            "recorded_meals": "={{ $json.recorded_meals }}",
+            "coverage_pct": "={{ $json.coverage_pct }}",
+            "goal_target_total": "={{ $json.goal_target_total }}",
+            "verified_goal_yes": "={{ $json.verified_goal_yes }}",
+            "verified_goal_no": "={{ $json.verified_goal_no }}",
+            "goal_achievement_pct": "={{ $json.goal_achievement_pct }}",
+            "metric_note": "={{ $json.metric_note }}",
+            "coach_summary": "={{ $json.coach_summary }}",
+            "ai_client_draft": "={{ $json.ai_client_draft }}",
+            "approved_text": "={{ $json.approved_text }}",
+            "review_status": "={{ $json.review_status }}",
+            "manually_replied_at": "={{ $json.manually_replied_at }}",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "summary_id",
+              "displayName": "summary_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_id",
+              "displayName": "client_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "week_no",
+              "displayName": "week_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "week_start",
+              "displayName": "week_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "week_end",
+              "displayName": "week_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "goal_text",
+              "displayName": "goal_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "expected_meals",
+              "displayName": "expected_meals",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recorded_meals",
+              "displayName": "recorded_meals",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "coverage_pct",
+              "displayName": "coverage_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "goal_target_total",
+              "displayName": "goal_target_total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "verified_goal_yes",
+              "displayName": "verified_goal_yes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "verified_goal_no",
+              "displayName": "verified_goal_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "goal_achievement_pct",
+              "displayName": "goal_achievement_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "metric_note",
+              "displayName": "metric_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "coach_summary",
+              "displayName": "coach_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_client_draft",
+              "displayName": "ai_client_draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_text",
+              "displayName": "approved_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_status",
+              "displayName": "review_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "manually_replied_at",
+              "displayName": "manually_replied_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2170,
+        -80
+      ],
+      "id": "8ae06672-246c-4dbe-ab7e-3458ffc85b9b",
+      "name": "新增週總結待審核列"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(i=>({json:{preview:true,summary_id:i.json.summary_id,client_id:i.json.client_id,coverage_pct:i.json.coverage_pct,goal_achievement_pct:i.json.goal_achievement_pct,metric_note:i.json.metric_note,ai_client_draft:i.json.ai_client_draft,coach_summary:i.json.coach_summary}}));",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2170,
+        160
+      ],
+      "id": "12c9740f-48d2-40d9-8930-f08fbfdd3cca",
+      "name": "安全預覽週總結"
+    }
+  ],
+  "connections": {
+    "手動測試": {
+      "main": [
+        [
+          {
+            "node": "讀取所有 Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "排程（本機 n8n 啟用後才會運作）": {
+      "main": [
+        [
+          {
+            "node": "讀取所有 Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取所有 Clients": {
+      "main": [
+        [
+          {
+            "node": "單次讀取保護",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "單次讀取保護": {
+      "main": [
+        [
+          {
+            "node": "讀取所有 Meals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取所有 Meals": {
+      "main": [
+        [
+          {
+            "node": "單次讀取餐點保護",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "單次讀取餐點保護": {
+      "main": [
+        [
+          {
+            "node": "讀取現有週總結避免覆寫已審核文字",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取現有週總結避免覆寫已審核文字": {
+      "main": [
+        [
+          {
+            "node": "建構週總結分析素材",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "建構週總結分析素材": {
+      "main": [
+        [
+          {
+            "node": "Gemini 撰寫週總結",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 撰寫週總結": {
+      "main": [
+        [
+          {
+            "node": "整理週報表與安全開關",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理週報表與安全開關": {
+      "main": [
+        [
+          {
+            "node": "寫入週報表？預設否",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "寫入週報表？預設否": {
+      "main": [
+        [
+          {
+            "node": "新增週總結待審核列",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "安全預覽週總結",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Taipei",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none"
+  },
+  "tags": []
+}

@@ -1,0 +1,507 @@
+{
+  "name": "Nutrition Coach | WF04-missing-log-reminder",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "07765f99-12f7-49fd-a8ab-6a729725f7f4",
+      "name": "手動測試"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 20 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        160
+      ],
+      "id": "acd4ef15-a966-4108-84b5-1a296b1033e7",
+      "name": "排程（本機 n8n 啟用後才會運作）"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clients",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        0
+      ],
+      "id": "1bd61d35-d622-4459-b283-cbfe30ed4572",
+      "name": "讀取追蹤中 Clients"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{count:$input.all().length}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        0
+      ],
+      "id": "86e647a4-0613-4005-a828-26c7b96c7c1b",
+      "name": "只讀一次"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Meals",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        690,
+        0
+      ],
+      "id": "eb9d13e0-b281-4166-90e2-f81063a1d30e",
+      "name": "讀取 Meals",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{meal_count:$input.all().filter(i=>i.json.submission_id).length}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ],
+      "id": "c9286689-dadb-4404-966d-6528d0a5199d",
+      "name": "保留 Meals 後續比對"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Reminders",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1110,
+        0
+      ],
+      "id": "1111d192-a874-40a9-b692-a3b55301e90e",
+      "name": "讀取現有提醒避免重複",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients=$('讀取追蹤中 Clients').all().map(x=>x.json),meals=[...$('讀取 Meals').all(),...$('讀取尚待分析的 Meal_Intake').all()].map(x=>x.json),old=new Set($input.all().map(x=>String(x.json.reminder_id??'')));\nconst today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);\nconst output=[];\nfor(const c of clients){\n if(!String(c.client_id||'').startsWith('TEST-'))continue;\n if(String(c.active||'').trim()!=='是'||!c.client_id||today<String(c.course_start||'9999')||today>String(c.course_end||'0000'))continue;\n const found=meals.some(m=>String(m.client_id)===String(c.client_id)&&String(m.meal_date)===today);\n const id='NOLOG|'+c.client_id+'|'+today;if(found||old.has(id))continue;\n const goal=String(c.goal_text||'逐步建立自己的飲食習慣').trim();\n const draft='嗨！今天截至目前還沒看到你的飲食紀錄 😊 有空的話可以補上一張餐點照片或簡單文字，讓我們一起持續追蹤「'+goal+'」的進展。若今天比較忙也沒關係，方便時再補充就好！';\n const PREVIEW_ONLY=true;\n output.push({json:{reminder_id:id,client_id:c.client_id,reminder_date:today,goal_text:goal,reason:'截至提醒時間沒有今日餐點紀錄',ai_draft:draft,approved_text:'',review_status:'待教練審核',manually_sent_at:'',created_at:new Date().toISOString(),allow_write:!PREVIEW_ONLY}});\n}\nreturn output;",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        0
+      ],
+      "id": "ab48b327-4c4b-4a19-b282-525bb11baac0",
+      "name": "找出今天尚未上傳的客戶"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b82b4879-d075-4057-ba7b-d0393ab6f7f8",
+              "leftValue": "={{ String($json.allow_write) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1560,
+        0
+      ],
+      "id": "6d7213c0-7368-401f-9926-a5bde196d830",
+      "name": "寫入提醒清單？預設否"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Reminders",
+          "mode": "name"
+        },
+        "operation": "append",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reminder_id": "={{ $json.reminder_id }}",
+            "client_id": "={{ $json.client_id }}",
+            "reminder_date": "={{ $json.reminder_date }}",
+            "goal_text": "={{ $json.goal_text }}",
+            "reason": "={{ $json.reason }}",
+            "ai_draft": "={{ $json.ai_draft }}",
+            "approved_text": "={{ $json.approved_text }}",
+            "review_status": "={{ $json.review_status }}",
+            "manually_sent_at": "={{ $json.manually_sent_at }}",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "reminder_id",
+              "displayName": "reminder_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_id",
+              "displayName": "client_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reminder_date",
+              "displayName": "reminder_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "goal_text",
+              "displayName": "goal_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_draft",
+              "displayName": "ai_draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_text",
+              "displayName": "approved_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_status",
+              "displayName": "review_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "manually_sent_at",
+              "displayName": "manually_sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1780,
+        -90
+      ],
+      "id": "8345d507-4255-49c0-b183-eb8f6d8e0338",
+      "name": "新增提醒（不發送任何私訊）"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(i=>({json:{client_id:i.json.client_id,reminder_date:i.json.reminder_date,preview:true,copy_text:i.json.ai_draft}}));",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        130
+      ],
+      "id": "f779fcb9-1954-4956-bb15-74a19974cbff",
+      "name": "提醒草稿安全預覽"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Meal_Intake",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        850,
+        300
+      ],
+      "id": "1e737270-70bc-421d-bd77-a95aabb81272",
+      "name": "讀取尚待分析的 Meal_Intake",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "3a83d745-9c0b-41d8-961e-09bd73f82700",
+      "name": "單次讀取提醒保護",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "return [{json:{intake_count:$input.all().length}}];"
+      },
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "手動測試": {
+      "main": [
+        [
+          {
+            "node": "讀取追蹤中 Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "排程（本機 n8n 啟用後才會運作）": {
+      "main": [
+        [
+          {
+            "node": "讀取追蹤中 Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取追蹤中 Clients": {
+      "main": [
+        [
+          {
+            "node": "只讀一次",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "只讀一次": {
+      "main": [
+        [
+          {
+            "node": "讀取 Meals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取 Meals": {
+      "main": [
+        [
+          {
+            "node": "保留 Meals 後續比對",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "保留 Meals 後續比對": {
+      "main": [
+        [
+          {
+            "node": "讀取尚待分析的 Meal_Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取現有提醒避免重複": {
+      "main": [
+        [
+          {
+            "node": "找出今天尚未上傳的客戶",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "找出今天尚未上傳的客戶": {
+      "main": [
+        [
+          {
+            "node": "寫入提醒清單？預設否",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "寫入提醒清單？預設否": {
+      "main": [
+        [
+          {
+            "node": "新增提醒（不發送任何私訊）",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "提醒草稿安全預覽",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取尚待分析的 Meal_Intake": {
+      "main": [
+        [
+          {
+            "node": "單次讀取提醒保護",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "單次讀取提醒保護": {
+      "main": [
+        [
+          {
+            "node": "讀取現有提醒避免重複",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Taipei",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none"
+  },
+  "tags": []
+}

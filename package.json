@@ -1,0 +1,13 @@
+{
+  "name": "nutrition-coach-n8n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Human-reviewed eight-week nutrition tracking workflows",
+  "scripts": {
+    "test": "node tests/workflows.cjs && node tests/release.cjs",
+    "configure": "node scripts/configure.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
