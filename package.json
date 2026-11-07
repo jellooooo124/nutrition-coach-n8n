@@ -4,7 +4,7 @@
   "private": true,
   "description": "Human-reviewed eight-week nutrition tracking workflows",
   "scripts": {
-    "test": "node tests/workflows.cjs && node tests/release.cjs && node tests/intake-security.cjs",
+    "test": "node tests/workflows.cjs && node tests/release.cjs && node tests/intake-security.cjs && node scripts/harden-workflows.cjs --check && node --test tests/reliability.cjs",
     "configure": "node scripts/configure.cjs"
   },
   "engines": {
