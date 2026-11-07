@@ -254,3 +254,7 @@ docs/data-dictionary.md        Six-tab data contract
 ```
 
 No license has been selected for this repository. Public visibility alone does not grant a redistribution or commercial-use license.
+
+## Independent code review and regression CI
+
+[7 November 2026 review](docs/code-review-2026-11-07.md) covers implementation quality, remaining operational risks and fit against the supplied n8n FDE requirements. Offline checks now run in [GitHub Actions](https://github.com/jellooooo124/nutrition-coach-n8n/actions/workflows/offline-tests.yml). The Apps Script adapter escapes formula-like form text before `appendRow`; regression tests verify literal writes without cloud access. Existing Forms response tabs and already-stored rows are not modified by this fix. This review did not repeat the historical live pilot tests.
