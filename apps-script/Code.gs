@@ -94,7 +94,7 @@ function date_(s){
   return Utilities.formatDate(new Date(s),'Asia/Taipei','yyyy-MM-dd');
 }
 function findRow_(sh,col,target){if(!sh||sh.getLastRow()<2)return -1;const vs=sh.getRange(2,col,sh.getLastRow()-1,1).getValues();for(let i=0;i<vs.length;i++)if(String(vs[i][0])===String(target))return i+2;return -1;}
-function appendByHeader_(sh,o){const cols=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];sh.appendRow(cols.map(c=>Object.prototype.hasOwnProperty.call(o,c)?o[c]:''));}
+function appendByHeader_(sh,o){const cols=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];sh.appendRow(cols.map(c=>literalCell_(Object.prototype.hasOwnProperty.call(o,c)?o[c]:'')));}
 function seedNutritionDemo(){
   const ss=SpreadsheetApp.openById(nutritionSpreadsheetId_());
   if(ss.getId()!==nutritionSpreadsheetId_())throw new Error('只能在獨立虛構測試表執行');
@@ -123,3 +123,6 @@ function nutritionSpreadsheetId_(){
  if(!id)throw new Error('Set NUTRITION_SPREADSHEET_ID in Script Properties first');
  return id;
 }
+
+// appendRow interprets leading '=' as a formula; form text must remain literal.
+function literalCell_(value){return typeof value==='string'&&/^\s*=/.test(value)?"'"+value:value;}
