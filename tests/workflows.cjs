@@ -22,12 +22,12 @@ check('Apps Script syntax',()=>{new Function(fs.readFileSync(path.join(root,'app
 const client={client_id:'TEST-8WK-001',active:'是',course_start:'2026-10-29',course_end:'2026-12-23',daily_expected_meals:3,daily_target_goal_meals:1,goal_text:'虛構蔬菜習慣',goal_rule:'一餐有蔬菜'};
 const data={'讀取所有 Clients':[client],'讀取所有 Meals':[]};
 check('Daily missing records: 0 coverage and unknown goal',()=>{const j=run('WF02','建構日總結分析素材',data)[0].json;return j.coverage_pct==='0'&&j.goal_achievement_pct==='';});
-check('Daily repeat skips existing report',()=>run('WF02','建構日總結分析素材',data,[{summary_id:'DAY|TEST-8WK-001|2026-11-04'}]).length===0);
+check('Daily repeat skips existing report while recovering older gaps',()=>run('WF02','建構日總結分析素材',data,[{summary_id:'DAY|TEST-8WK-001|2026-11-04'}]).every(i=>i.json.summary_id!=='DAY|TEST-8WK-001|2026-11-04'));
 for(let week=1;week<=8;week++) {
  const now=new Date(Date.parse('2026-10-29T10:00:00Z')+week*7*86400000).toISOString();
  check('Weekly course boundary '+week,()=>run('WF03','建構週總結分析素材',data,[],now)[0].json.week_no===String(week));
 }
-check('No week 9',()=>run('WF03','建構週總結分析素材',data,[],'2026-12-31T10:00:00Z').length===0);
+check('No week 9; missing completed weeks may recover',()=>run('WF03','建構週總結分析素材',data,[],'2026-12-31T10:00:00Z').every(i=>Number(i.json.week_no)<=8));
 check('Sandbox reminder remains unapproved draft',()=>{const r=run('WF04','找出今天尚未上傳的客戶',{'讀取追蹤中 Clients':[client],'讀取 Meals':[]});return r.length===1&&r[0].json.allow_write===false&&r[0].json.approved_text==='';});
 check('Reminder skips uploaded analyzed meal',()=>run('WF04','找出今天尚未上傳的客戶',{'讀取追蹤中 Clients':[client],'讀取 Meals':[{client_id:client.client_id,meal_date:'2026-11-05'}]}).length===0);
 check('Regression: 0 percent must remain 0 in AI prompt',()=>run('WF02','建構日總結分析素材',data)[0].json.requestBody.contents[0].parts[0].text.includes('記錄覆蓋率：0%'));
@@ -39,7 +39,7 @@ check('Sandbox rejects non-test client',()=>run('WF01','檢查輸入資料',{},[
 check('Valid leap day accepted',()=>run('WF01','檢查輸入資料',{},[{...sample,meal_date:'2024-02-29'}])[0].json.valid===true);
 check('Weekly 0 percent preserved in prompt',()=>run('WF03','建構週總結分析素材',data)[0].json.requestBody.contents[0].parts[0].text.includes('：0%'));
 check('Sandbox references only isolated spreadsheet',()=>Object.values(flows).every(w=>w.nodes.every(n=>!n.parameters.documentId||n.parameters.documentId.value==='YOUR_SPREADSHEET_ID')));
-check('Meal writes append without updating coach edits',()=>flows.WF01.nodes.find(n=>n.name==='新增或更新 Meals 草稿').parameters.operation==='append');
+check('Meal writes through idempotent gateway without update operations',()=>flows.WF01.nodes.find(n=>n.name==='新增或更新 Meals 草稿').parameters.url.endsWith('/v1/drafts/Meals'));
 const report={scope:'Offline JavaScript only; mocked n8n inputs; no Google, Gemini, n8n runtime or real customer data accessed',passed:results.filter(r=>r.passed).length,failed:results.filter(r=>!r.passed).length,results};
 
 console.log(JSON.stringify(report,null,2));

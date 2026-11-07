@@ -8,3 +8,8 @@ node_modules/
 .DS_Store
 reports/
 credentials*.json
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*service-account*.json

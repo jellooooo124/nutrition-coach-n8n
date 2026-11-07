@@ -13,6 +13,12 @@ Multimodal AI · Google Workspace integrations · Human review · Eight-week tra
 
 ---
 
+## Reliability upgrade (source implemented; live migration pending)
+
+The four current exports write through an HTTPS **FastAPI + PostgreSQL draft gateway** for n8n Cloud (SQLite is only for local development). Unique IDs serialize competing writes; uncertain Sheets writes require read-only reconciliation. Daily/weekly jobs recover bounded missing periods, and Gemini responses must pass strict runtime shape/completion checks before persistence.
+
+Start with the [guided installation and acceptance checklist (繁體中文)](docs/reliability-upgrade.zh-TW.md). The previous pilot evidence below describes the earlier release, not live verification of this upgrade. Existing Sheets/Gemini credentials are retained; the gateway needs a separately authorized service account for the isolated test spreadsheet. Stop the old writers before activating these exports.
+
 ## The deployment challenge
 
 A nutrition coach needs to turn meal photos and brief messages into useful feedback for each client's goals, then maintain a consistent view across an eight-week programme. The difficult part is the operational chain: getting the right input, joining it to the right client, distinguishing missing information from failure, preserving the coach's judgment, and making the result easy to act on.
@@ -125,7 +131,7 @@ For example, a synthetic day with **3 of 3 meal slots recorded** has **100% reco
 
 Submission IDs and deterministic daily/weekly/reminder IDs support lookup-before-append behavior. Existing rows are skipped instead of overwritten, protecting approved copy.
 
-The tradeoff is explicit: a later coach correction does not automatically recalculate an already-created report. This is also **not transaction-safe exactly-once processing**; concurrent runs can race between lookup and append. A production version needs durable uniqueness and revision-aware report regeneration.
+The tradeoff is explicit: a later coach correction does not automatically recalculate an already-created report. Current exports use a durable gateway uniqueness key before appending; competing writes to the same ID cannot both own the append when they share the same PostgreSQL database (or SQLite file in local tests). A lost response requires reconciliation rather than an automatic rewrite. This is not a cross-system exactly-once guarantee. Revision-aware report regeneration remains outstanding.
 
 ### 4. Diagnose authorization separately from model quality
 
@@ -137,13 +143,13 @@ That result does not establish permission to every privately uploaded file. The 
 
 Gemini requests ask for JSON using a response schema. Parsing and output checks run before draft persistence. Live tests exposed unsupported goal-completion language; a conservative replacement was added, and the daily/weekly case was captured as a regression test.
 
-This is a targeted mitigation, not a general factuality evaluator. Internal summaries and drafts still require human review; complete runtime schema validation, prompt-injection evaluation, and a measured quality benchmark remain future work.
+This is a targeted mitigation, not a general factuality evaluator. Internal summaries and drafts still require human review; runtime schema validation now rejects missing/extra fields, wrong types, blank required fields and incomplete/blocked responses. Prompt-injection evaluation and a measured quality benchmark remain future work.
 
 ### 6. Design for the operating environment that exists
 
 The pilot runs on a local Apple Silicon Mac. A Google-side form trigger normalizes input, while n8n polls Sheets, so the intake flow does not require exposing a local webhook or publishing an Apps Script web app.
 
-The same choice creates an availability constraint: the Mac and n8n must remain running. There is no durable catch-up scheduler for missed daily or weekly runs. That is a production requirement, not something hidden behind the word “automated.”
+The same choice creates an availability constraint: the Mac and n8n must remain running. Current exports recover missing daily reports within seven days and completed weekly reports due within fourteen days, with a five-report cap per workflow run. Older gaps require operator action; this bounded scan is not a full durable scheduler.
 
 ## What was actually verified
 
@@ -165,7 +171,7 @@ The same choice creates an availability constraint: the Mac and n8n must remain 
 | Daily/weekly/reminder wall-clock execution | Not yet observed | Registration and manual runs are not presented as timed-run evidence |
 | Arbitrary new private uploads / eight weeks of continuous operation | Not yet validated | Remain outside the verified scope |
 
-Reproduce the offline checks without cloud credentials:
+Reproduce the offline checks without cloud credentials (the gateway additionally uses `pytest -q service/tests` after installing `service/requirements.txt` and pytest):
 
 ```bash
 npm test
@@ -200,10 +206,10 @@ See the [data dictionary](docs/data-dictionary.md) for column order and the [ope
 4. Generate local copies:
 
    ```bash
-   npm run configure -- YOUR_SPREADSHEET_ID YOUR_NUMERIC_INTAKE_GID
+   npm run configure -- YOUR_SPREADSHEET_ID YOUR_NUMERIC_INTAKE_GID https://YOUR_DEPLOYED_HOST
    ```
 
-5. Import the JSON files from `.local/workflows/` into n8n. Bind Google Sheets OAuth2, Sheets Trigger OAuth2, and Gemini Header Auth (`x-goog-api-key`) in the relevant nodes.
+5. Follow the [gateway installation guide](docs/reliability-upgrade.zh-TW.md), create its Header Auth credential, and stop the old writers. Import the JSON files from `.local/workflows/` into n8n. Bind Google Sheets OAuth2, Sheets Trigger OAuth2, and Gemini Header Auth (`x-goog-api-key`) in the relevant nodes.
 6. Submit only `TEST-` synthetic clients. Verify text first, then a private image whose application access has been confirmed.
 7. Review preview output, set `PREVIEW_ONLY=false` in your local workflow copies when ready to persist, then publish only after the acceptance checks pass.
 
@@ -216,10 +222,10 @@ Use the [full deployment guide](docs/setup.zh-TW.md) for exact node names, crede
 | Priority | Gap | Acceptance criterion before rollout |
 | --- | --- | --- |
 | P0 | Private image ingestion | A newly uploaded private image can be retrieved through the intended credential path without public sharing |
-| P0 | Availability and recovery | Restart during a scheduled window; missed eligible reports are recovered without duplicate writes |
+| P0 | Live recovery acceptance | Verify the new bounded backfill and restart/reconciliation behavior in the user-owned runtime |
 | P0 | Failure visibility | An invalid model response or exhausted API retry becomes visible to an operator with a safe retry path |
 | P0 | AI quality and data governance | Reviewed evaluation cases, explicit consent/retention/access rules, and no unsupported claim escaping the agreed review process |
-| P1 | Durable deduplication | Concurrent submissions cannot create duplicate records; reviewer edits remain intact |
+| P1 | Live migration of draft gateway | Validate the implemented single-writer ledger against the authorized Google test sheet; disable all legacy direct writers |
 | P1 | Report revisions | A late verified decision produces an explicit new report revision rather than silently changing approved text |
 | P1 | Scale and cost | Measure per-meal latency, API cost, quota pressure, and approval effort on a representative synthetic workload |
 | P2 | Reusable integration | Promote repeated ingestion or review requirements into a shared component after reuse is demonstrated |

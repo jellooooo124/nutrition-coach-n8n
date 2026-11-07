@@ -25,7 +25,7 @@ for (const file of files.filter(f => /^WF0[23]/.test(f))) {
   const ai = {ai_client_draft:'完全符合我們的每日目標！',coach_summary:'需要核實'};
   const output = new Function('$', '$input', node.parameters.jsCode)(
     () => ({all: () => [{json:original}]}),
-    {all: () => [{json:{candidates:[{content:{parts:[{text:JSON.stringify(ai)}]}}]}}]}
+    {all: () => [{json:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(ai)}]}}]}}]}
   )[0].json;
   assert(!output.ai_client_draft.includes('完全符合'));
   assert.equal(output.review_status, '待教練審核');

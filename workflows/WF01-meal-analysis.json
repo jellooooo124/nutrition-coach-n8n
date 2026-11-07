@@ -359,7 +359,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const orig=$('結合客戶目標及餐點').itemMatching(0).json;\nlet ai={},error='';\ntry { const text=String($input.first().json.candidates?.[0]?.content?.parts?.[0]?.text??'').replace(/^```(?:json)?\\s*/i,'').replace(/```\\s*$/,'').trim(); ai=JSON.parse(text); }\ncatch(e){error='Gemini 回傳格式無法解析：'+e.message;}\nconst clean=v=>String(v??'').replace(/\\\\n/g,'\\n').trim();\nconst output={submission_id:orig.submission_id,client_id:orig.client_id,meal_date:orig.meal_date,meal_type:orig.meal_type,meal_text:orig.meal_text??'',photo_drive_url:orig.photo_drive_url??'',ate_all:orig.ate_all??'',portion_notes:orig.portion_notes??'',client_goal:orig.client_goal,\n observed_foods:clean(ai.observed_foods),goal_alignment:clean(ai.goal_alignment)||'資料不足',ai_coach_assessment:clean(ai.ai_coach_assessment),missing_info:clean(ai.missing_info),ai_client_draft:clean(ai.ai_client_draft),coach_approved_text:'',coach_goal_met:'待確認',review_status:'待教練審核',manually_replied_at:'',processing_status:error?'AI錯誤_需人工處理':'AI草稿待教練審核',issue_flags:clean(ai.issue_flags)+(error?'\\n'+error:''),created_at:new Date().toISOString()};\nconst unsupported=/(達成|達標|落實|做到|完成|符合.{0,15}目標|完美|每天.{0,20}都)/.test(output.ai_client_draft);\nif(unsupported){\n output.ai_coach_assessment+='\\n[輸出檢查] 原始客戶草稿含未經人工核實的達標敘述，已改為保守回饋。';\n output.ai_client_draft='已收到這餐紀錄。針對你設定的「'+orig.client_goal+'」，下次可以補充與目標相關的食物、實際吃了多少，以及是否吃完，讓我們更清楚追蹤進度。這次紀錄是否符合目標，仍需由教練核實；照片或文字中出現某項食物，不代表已確認實際攝取量。';\n output.issue_flags+='\\nunsupported_goal_claim_replaced';\n}\n// 先只預覽；確認資料權限及測試後，將此行改成 false 才能寫入測試表。\nconst PREVIEW_ONLY=true;\nreturn [{json:{...output,allow_write:!PREVIEW_ONLY&&!error&&!!output.ai_client_draft}}];",
+        "jsCode": "// Shared source embedded into exported Code nodes by scripts/harden-workflows.cjs.\nfunction validateGeminiResponse(response, kind) {\n  const fail = code => { throw new Error('AI_RESPONSE_REJECTED: ' + code + '; no draft was written'); };\n  if (!response || response.error || response.promptFeedback?.blockReason) fail('BLOCKED_OR_ERROR');\n  if (!Array.isArray(response.candidates) || response.candidates.length !== 1) fail('CANDIDATE_COUNT');\n  const candidate = response.candidates[0];\n  if (candidate.finishReason !== 'STOP') fail('INCOMPLETE_RESPONSE');\n  const parts = candidate.content?.parts;\n  if (!Array.isArray(parts) || parts.length !== 1 || typeof parts[0].text !== 'string' || parts[0].thought === true) fail('TEXT_REQUIRED');\n  if (parts[0].text.length > 24000) fail('RESPONSE_TOO_LARGE');\n  const text = parts[0].text.trim().replace(/^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i, '$1');\n  let data;\n  try { data = JSON.parse(text); } catch { fail('INVALID_JSON'); }\n  const fields = kind === 'meal'\n    ? ['observed_foods','goal_alignment','ai_coach_assessment','missing_info','ai_client_draft','issue_flags']\n    : ['coach_summary','ai_client_draft'];\n  if (!data || typeof data !== 'object' || Array.isArray(data)) fail('OBJECT_REQUIRED');\n  if (Object.keys(data).length !== fields.length || Object.keys(data).some(k => !fields.includes(k))) fail('UNEXPECTED_FIELDS');\n  for (const field of fields) {\n    if (!Object.prototype.hasOwnProperty.call(data, field) || typeof data[field] !== 'string') fail('FIELD_TYPE');\n    if (data[field].length > 4000 || /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/.test(data[field])) fail('FIELD_CONTENT');\n    if (!['missing_info','issue_flags'].includes(field) && !data[field].trim()) fail('EMPTY_FIELD');\n  }\n  return data;\n}\n// END SHARED RESPONSE VALIDATOR\nconst orig=$('結合客戶目標及餐點').itemMatching(0).json;\nconst ai=validateGeminiResponse($input.first().json,'meal');\nconst error='';\nconst clean=v=>String(v??'').replace(/\\\\n/g,'\\n').trim();\nconst output={submission_id:orig.submission_id,client_id:orig.client_id,meal_date:orig.meal_date,meal_type:orig.meal_type,meal_text:orig.meal_text??'',photo_drive_url:orig.photo_drive_url??'',ate_all:orig.ate_all??'',portion_notes:orig.portion_notes??'',client_goal:orig.client_goal,\n observed_foods:clean(ai.observed_foods),goal_alignment:clean(ai.goal_alignment)||'資料不足',ai_coach_assessment:clean(ai.ai_coach_assessment),missing_info:clean(ai.missing_info),ai_client_draft:clean(ai.ai_client_draft),coach_approved_text:'',coach_goal_met:'待確認',review_status:'待教練審核',manually_replied_at:'',processing_status:error?'AI錯誤_需人工處理':'AI草稿待教練審核',issue_flags:clean(ai.issue_flags)+(error?'\\n'+error:''),created_at:new Date().toISOString()};\nconst unsupported=/(達成|達標|落實|做到|完成|符合.{0,15}目標|完美|每天.{0,20}都)/.test(output.ai_client_draft);\nif(unsupported){\n output.ai_coach_assessment+='\\n[輸出檢查] 原始客戶草稿含未經人工核實的達標敘述，已改為保守回饋。';\n output.ai_client_draft='已收到這餐紀錄。針對你設定的「'+orig.client_goal+'」，下次可以補充與目標相關的食物、實際吃了多少，以及是否吃完，讓我們更清楚追蹤進度。這次紀錄是否符合目標，仍需由教練核實；照片或文字中出現某項食物，不代表已確認實際攝取量。';\n output.issue_flags+='\\nunsupported_goal_claim_replaced';\n}\n// 先只預覽；確認資料權限及測試後，將此行改成 false 才能寫入測試表。\nconst PREVIEW_ONLY=true;\nreturn [{json:{...output,allow_write:!PREVIEW_ONLY&&!error&&!!output.ai_client_draft}}];",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -406,243 +406,19 @@
     },
     {
       "parameters": {
-        "documentId": {
-          "__rl": true,
-          "value": "YOUR_SPREADSHEET_ID",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Meals",
-          "mode": "name"
-        },
-        "operation": "append",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "submission_id": "={{ $json.submission_id }}",
-            "client_id": "={{ $json.client_id }}",
-            "meal_date": "={{ $json.meal_date }}",
-            "meal_type": "={{ $json.meal_type }}",
-            "meal_text": "={{ $json.meal_text }}",
-            "photo_drive_url": "={{ $json.photo_drive_url }}",
-            "ate_all": "={{ $json.ate_all }}",
-            "portion_notes": "={{ $json.portion_notes }}",
-            "client_goal": "={{ $json.client_goal }}",
-            "observed_foods": "={{ $json.observed_foods }}",
-            "goal_alignment": "={{ $json.goal_alignment }}",
-            "ai_coach_assessment": "={{ $json.ai_coach_assessment }}",
-            "missing_info": "={{ $json.missing_info }}",
-            "ai_client_draft": "={{ $json.ai_client_draft }}",
-            "coach_approved_text": "={{ $json.coach_approved_text }}",
-            "coach_goal_met": "={{ $json.coach_goal_met }}",
-            "review_status": "={{ $json.review_status }}",
-            "manually_replied_at": "={{ $json.manually_replied_at }}",
-            "processing_status": "={{ $json.processing_status }}",
-            "issue_flags": "={{ $json.issue_flags }}",
-            "created_at": "={{ $json.created_at }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "submission_id",
-              "displayName": "submission_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "client_id",
-              "displayName": "client_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "meal_date",
-              "displayName": "meal_date",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "meal_type",
-              "displayName": "meal_type",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "meal_text",
-              "displayName": "meal_text",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "photo_drive_url",
-              "displayName": "photo_drive_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "ate_all",
-              "displayName": "ate_all",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "portion_notes",
-              "displayName": "portion_notes",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "client_goal",
-              "displayName": "client_goal",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "observed_foods",
-              "displayName": "observed_foods",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "goal_alignment",
-              "displayName": "goal_alignment",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "ai_coach_assessment",
-              "displayName": "ai_coach_assessment",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "missing_info",
-              "displayName": "missing_info",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "ai_client_draft",
-              "displayName": "ai_client_draft",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "coach_approved_text",
-              "displayName": "coach_approved_text",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "coach_goal_met",
-              "displayName": "coach_goal_met",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "review_status",
-              "displayName": "review_status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "manually_replied_at",
-              "displayName": "manually_replied_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "processing_status",
-              "displayName": "processing_status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "issue_flags",
-              "displayName": "issue_flags",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "method": "POST",
+        "url": "https://YOUR_GATEWAY_HOST.invalid/v1/drafts/Meals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({row: {\"submission_id\": $json[\"submission_id\"],\"client_id\": $json[\"client_id\"],\"meal_date\": $json[\"meal_date\"],\"meal_type\": $json[\"meal_type\"],\"meal_text\": $json[\"meal_text\"],\"photo_drive_url\": $json[\"photo_drive_url\"],\"ate_all\": $json[\"ate_all\"],\"portion_notes\": $json[\"portion_notes\"],\"client_goal\": $json[\"client_goal\"],\"observed_foods\": $json[\"observed_foods\"],\"goal_alignment\": $json[\"goal_alignment\"],\"ai_coach_assessment\": $json[\"ai_coach_assessment\"],\"missing_info\": $json[\"missing_info\"],\"ai_client_draft\": $json[\"ai_client_draft\"],\"coach_approved_text\": $json[\"coach_approved_text\"],\"coach_goal_met\": $json[\"coach_goal_met\"],\"review_status\": $json[\"review_status\"],\"manually_replied_at\": $json[\"manually_replied_at\"],\"processing_status\": $json[\"processing_status\"],\"issue_flags\": $json[\"issue_flags\"],\"created_at\": $json[\"created_at\"]}}) }}",
         "options": {
-          "cellFormat": "RAW"
+          "timeout": 120000
         }
       },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         3270,
         -360
