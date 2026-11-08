@@ -180,133 +180,19 @@
     },
     {
       "parameters": {
-        "documentId": {
-          "__rl": true,
-          "value": "YOUR_SPREADSHEET_ID",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Reminders",
-          "mode": "name"
-        },
-        "operation": "append",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "reminder_id": "={{ $json.reminder_id }}",
-            "client_id": "={{ $json.client_id }}",
-            "reminder_date": "={{ $json.reminder_date }}",
-            "goal_text": "={{ $json.goal_text }}",
-            "reason": "={{ $json.reason }}",
-            "ai_draft": "={{ $json.ai_draft }}",
-            "approved_text": "={{ $json.approved_text }}",
-            "review_status": "={{ $json.review_status }}",
-            "manually_sent_at": "={{ $json.manually_sent_at }}",
-            "created_at": "={{ $json.created_at }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "reminder_id",
-              "displayName": "reminder_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "client_id",
-              "displayName": "client_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "reminder_date",
-              "displayName": "reminder_date",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "goal_text",
-              "displayName": "goal_text",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "reason",
-              "displayName": "reason",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "ai_draft",
-              "displayName": "ai_draft",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "approved_text",
-              "displayName": "approved_text",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "review_status",
-              "displayName": "review_status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "manually_sent_at",
-              "displayName": "manually_sent_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "method": "POST",
+        "url": "https://YOUR_GATEWAY_HOST.invalid/v1/drafts/Reminders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({row: {\"reminder_id\": $json[\"reminder_id\"],\"client_id\": $json[\"client_id\"],\"reminder_date\": $json[\"reminder_date\"],\"goal_text\": $json[\"goal_text\"],\"reason\": $json[\"reason\"],\"ai_draft\": $json[\"ai_draft\"],\"approved_text\": $json[\"approved_text\"],\"review_status\": $json[\"review_status\"],\"manually_sent_at\": $json[\"manually_sent_at\"],\"created_at\": $json[\"created_at\"]}}) }}",
         "options": {
-          "cellFormat": "RAW"
+          "timeout": 120000
         }
       },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1780,
         -90

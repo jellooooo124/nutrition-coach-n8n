@@ -1,5 +1,7 @@
 # Nutrition Coach n8n
 
+> 目前版本已加入雲端寫入服務、有限補跑與嚴格模型輸出驗證。請先依照 [可靠性升級步驟](reliability-upgrade.zh-TW.md) 完成服務與憑證設定；本頁保留原始 Google Forms／Sheets 設置說明。歷史 live 測試不等於新版本已部署驗收。
+
 以 **n8n、Google Sheets、Google Forms、Google Apps Script 與 Gemini** 建立八週營養紀錄追蹤。系統整理每餐照片或文字、產生日報與週報、建立未上傳提醒；所有對外文字都由教練審核、修改後手動複製到既有溝通平台。
 
 這是一套以虛構資料驗證過的半自動工作流範本，不是可直接投入真實客戶服務的成品，也沒有對外自動發訊功能。
@@ -101,7 +103,7 @@ npx n8n@2.20.0
 在下載或 clone 後的專案目錄執行：
 
 ```sh
-npm run configure -- YOUR_SPREADSHEET_ID 123456789
+npm run configure -- YOUR_SPREADSHEET_ID 123456789 https://YOUR_DEPLOYED_HOST
 ```
 
 第二個參數是 `Meal_Intake` 的實際 gid。指令會把四個已替換設定的 JSON 寫入 `.local/workflows/`。此目錄已加入 `.gitignore`；不會修改倉庫內的通用範本，也不會連線到 Google 或啟用 n8n。
@@ -112,9 +114,10 @@ npm run configure -- YOUR_SPREADSHEET_ID 123456789
 
 | 節點 | n8n 憑證／設定 |
 | --- | --- |
-| 所有 Google Sheets 讀取與新增列節點 | Google Sheets OAuth2 |
+| 所有 Google Sheets 讀取節點 | Google Sheets OAuth2 |
 | WF01 的 Google Sheets Trigger | Google Sheets Trigger OAuth2 |
 | WF01「Google Drive 下載照片」 | HTTP Request 的預定義 Google Sheets OAuth2 憑證，沿用實測的檔案存取方式 |
+| 四個新增草稿 HTTP Request 節點 | Header Auth：`X-Nutrition-Key`，值使用 gateway key |
 | 所有 Gemini HTTP Request | Header Auth，名稱 `x-goog-api-key`，值為自己的 Gemini API key |
 
 範本沒有包含任何憑證 ID，所以必須在每個需要憑證的節點重新選取。不要把 key 放進 JSON、Code 節點或 README。
@@ -125,7 +128,7 @@ npm run configure -- YOUR_SPREADSHEET_ID 123456789
 
 請先用一張無個人資訊的虛構餐點圖片測試下載節點，再測試 AI。若回傳 403／404，檢查帳號、檔案 ID、檔案是否對該應用授權，以及 OAuth scope。必要時另設 Google Drive OAuth2 憑證並由帳號擁有人核准，修改下載節點的憑證類型後重新測試。這個替代路徑尚未在本範本完成端到端驗證。
 
-不要為了排除權限錯誤把私人照片公開。無須開啟公開 webhook 或部署 Apps Script Web App；此版本靠 Google 的提交觸發器與本機 n8n 輪詢運作。
+不要為了排除權限錯誤把私人照片公開。無須開啟公開 webhook 或部署 Apps Script Web App；此版本靠 Google 的提交觸發器與 n8n 輪詢運作。
 
 ## 4. 先預覽，再允許寫入
 
@@ -156,7 +159,7 @@ const PREVIEW_ONLY=true;
 4. 用可授權讀取的虛構照片再提交一筆，確認經過照片下載與 Gemini 路徑。
 5. 編輯 `coach_approved_text`、`coach_goal_met` 與 `review_status`，再重跑 WF01：既有紀錄應跳過且保留修改。
 6. 準備前一天且落在課程內的虛構紀錄，手動跑 WF02。沒有紀錄的學員應顯示 0 覆蓋率，未核實目標應保持未知。
-7. 另用起始日為七天前的測試學員跑 WF03，確認第一週期間與總計；今天若不是滿週日，沒有輸出是預期結果。
+7. 另用起始日為七天前的測試學員跑 WF03，確認第一週期間與總計；即使錯過滿週日，只要仍在補跑窗口內且該週尚無報表，也會產生輸出。
 8. 跑 WF04：今日沒有輸入的測試學員會有提醒；已有 `Meal_Intake`、即使還沒分析，也不應被提醒。
 9. 確認無誤後發布工作流，再新增一筆餐點；等候輪詢，確認不用點 Execute 也能產生新草稿。
 
@@ -173,7 +176,7 @@ const PREVIEW_ONLY=true;
 
 Code 節點的日期計算也使用 UTC+8，因此不能只修改 workflow timezone 就當成完成其他時區移植。日期欄使用 `YYYY-MM-DD`；課程結束日為開始日加 55 天，共 56 天。
 
-本機 n8n 必須持續運作且 Mac 不休眠。此版本**沒有停機補跑機制**：錯過週報滿週日或日報排程不會自動補齊。也沒有服務自動啟動、外部監控或錯誤通知工作流。
+若仍使用本機 n8n，主機必須持續運作且不能休眠；n8n Cloud 不受本機休眠影響。目前版本會找回最近 7 天缺少的日報，以及最近 14 天內到期而缺少的完整週報；每個流程每次最多 5 份，超過窗口需人工處理。也沒有服務自動啟動、外部監控或錯誤通知工作流。
 
 ## 統計定義
 

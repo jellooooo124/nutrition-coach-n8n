@@ -133,7 +133,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const clients=$('讀取所有 Clients').all().map(i=>i.json),meals=$('讀取所有 Meals').all().map(i=>i.json),existing=new Set($input.all().map(i=>String(i.json.summary_id||'')));\nconst iso=d=>d.toISOString().slice(0,10);const yday=iso(new Date(Date.now()+8*3600000-86400000));\nconst result=[];\nfor(const c of clients){\n if(!String(c.client_id||'').startsWith('TEST-'))continue;\n if(String(c.active||'').trim()!=='是'||!c.client_id||yday<String(c.course_start||'9999')||yday>String(c.course_end||'0000')) continue;\n const id='DAY|'+c.client_id+'|'+yday;if(existing.has(id))continue;\n const eligible=meals.filter(r=>String(r.client_id)===String(c.client_id)&&String(r.meal_date)===yday);const m=[...new Map(eligible.map(r=>[String(r.meal_date)+'|'+String(r.meal_type),r])).values()];\n const unique=new Set(m.map(r=>r.meal_type));const expected=Math.max(0,Number(c.daily_expected_meals)||0);const target=Math.max(0,Number(c.daily_target_goal_meals)||0);\n const yes=m.filter(r=>String(r.coach_goal_met).trim()==='是').length,no=m.filter(r=>String(r.coach_goal_met).trim()==='否').length;\n const cov=expected?Math.min(100,Math.round(unique.size/expected*100)):'';\n const goalPct=target&&yes+no?Math.min(100,Math.round(yes/target*100)):'';\n const dayNo=Math.round((new Date(yday+'T00:00:00Z')-new Date(String(c.course_start).slice(0,10)+'T00:00:00Z'))/86400000);const week=Math.floor(dayNo/7)+1;\n const note=(unique.size<expected?'此日記錄未完整，':'')+(!target?'未設定可量化的個別目標；':yes+no===0?'教練尚未核實是否符合目標；':'目標進度僅依教練核實資料計算，非健康成果。');\n const details=m.map(r=>[r.meal_type,'描述:'+String(r.meal_text||r.observed_foods||'沒有可核實內容'),'AI 目標關聯:'+String(r.goal_alignment||'資料不足'),'教練核實:'+String(r.coach_goal_met||'待確認')].join(' / ')).join('\\n');\n const prompt=['你是營養教練的內部助理，使用繁體中文。請根據'+yday+'一整天的餐點資料寫客製化日總結，個案第'+week+'週。','個人八週目標：'+String(c.goal_text||''),'追蹤指標：'+String(c.goal_rule||''),'記錄覆蓋率：'+String(cov === '' ? '無法計算' : cov)+'%；依人工核實的目標進度：'+String(goalPct === '' ? '無法計算' : goalPct)+'%。'+note,'記錄：\\n'+(details||'無上傳'), '嚴禁把缺漏推論為沒吃或目標失敗；不推測體重/疾病/血糖，並指出資訊不足。輸出 coach_summary 給教練、ai_client_draft 給客戶約100-160字可複製貼回平台、鼓勵下一步。'].join('\\n');\n result.push({json:{summary_id:id,client_id:c.client_id,report_date:yday,course_week:String(week),goal_text:c.goal_text||'',expected_meals:String(expected),recorded_meals:String(unique.size),coverage_pct:String(cov),daily_target_goal_meals:String(target),verified_goal_yes:String(yes),verified_goal_no:String(no),goal_achievement_pct:String(goalPct),metric_note:note,requestBody:{contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:{type:'object',properties:{coach_summary:{type:'string'},ai_client_draft:{type:'string'}},required:['coach_summary','ai_client_draft']}}}}});\n}\nreturn result;",
+        "jsCode": "const clients=$('讀取所有 Clients').all().map(i=>i.json),meals=$('讀取所有 Meals').all().map(i=>i.json),existing=new Set($input.all().map(i=>String(i.json.summary_id||'')));\nconst iso=d=>d.toISOString().slice(0,10);\nconst BACKFILL_DAYS=7, MAX_REPORTS_PER_RUN=5;\nconst validDate=s=>/^\\d{4}-\\d{2}-\\d{2}$/.test(String(s))&&!isNaN(Date.parse(s+'T00:00:00Z'))&&iso(new Date(s+'T00:00:00Z'))===s;\nconst result=[];\nfor(let ago=1;ago<=BACKFILL_DAYS;ago++){\nconst yday=iso(new Date(Date.now()+8*3600000-ago*86400000));\nfor(const c of clients){\n if(result.length>=MAX_REPORTS_PER_RUN)break;\n if(!validDate(c.course_start)||!validDate(c.course_end))continue;\n if(!String(c.client_id||'').startsWith('TEST-'))continue;\n if(String(c.active||'').trim()!=='是'||!c.client_id||yday<String(c.course_start||'9999')||yday>String(c.course_end||'0000')) continue;\n const id='DAY|'+c.client_id+'|'+yday;if(existing.has(id))continue;existing.add(id);\n const eligible=meals.filter(r=>String(r.client_id)===String(c.client_id)&&String(r.meal_date)===yday);const m=[...new Map(eligible.map(r=>[String(r.meal_date)+'|'+String(r.meal_type),r])).values()];\n const unique=new Set(m.map(r=>r.meal_type));const expected=Math.max(0,Number(c.daily_expected_meals)||0);const target=Math.max(0,Number(c.daily_target_goal_meals)||0);\n const yes=m.filter(r=>String(r.coach_goal_met).trim()==='是').length,no=m.filter(r=>String(r.coach_goal_met).trim()==='否').length;\n const cov=expected?Math.min(100,Math.round(unique.size/expected*100)):'';\n const goalPct=target&&yes+no?Math.min(100,Math.round(yes/target*100)):'';\n const dayNo=Math.round((new Date(yday+'T00:00:00Z')-new Date(String(c.course_start).slice(0,10)+'T00:00:00Z'))/86400000);const week=Math.floor(dayNo/7)+1;\n const note=(unique.size<expected?'此日記錄未完整，':'')+(!target?'未設定可量化的個別目標；':yes+no===0?'教練尚未核實是否符合目標；':'目標進度僅依教練核實資料計算，非健康成果。');\n const details=m.map(r=>[r.meal_type,'描述:'+String(r.meal_text||r.observed_foods||'沒有可核實內容'),'AI 目標關聯:'+String(r.goal_alignment||'資料不足'),'教練核實:'+String(r.coach_goal_met||'待確認')].join(' / ')).join('\\n');\n const prompt=['你是營養教練的內部助理，使用繁體中文。請根據'+yday+'一整天的餐點資料寫客製化日總結，個案第'+week+'週。','個人八週目標：'+String(c.goal_text||''),'追蹤指標：'+String(c.goal_rule||''),'記錄覆蓋率：'+String(cov === '' ? '無法計算' : cov)+'%；依人工核實的目標進度：'+String(goalPct === '' ? '無法計算' : goalPct)+'%。'+note,'記錄：\\n'+(details||'無上傳'), '嚴禁把缺漏推論為沒吃或目標失敗；不推測體重/疾病/血糖，並指出資訊不足。輸出 coach_summary 給教練、ai_client_draft 給客戶約100-160字可複製貼回平台、鼓勵下一步。'].join('\\n');\n result.push({json:{summary_id:id,client_id:c.client_id,report_date:yday,course_week:String(week),goal_text:c.goal_text||'',expected_meals:String(expected),recorded_meals:String(unique.size),coverage_pct:String(cov),daily_target_goal_meals:String(target),verified_goal_yes:String(yes),verified_goal_no:String(no),goal_achievement_pct:String(goalPct),metric_note:note,requestBody:{contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:{type:'object',properties:{coach_summary:{type:'string'},ai_client_draft:{type:'string'}},required:['coach_summary','ai_client_draft']}}}}});\n}\n}\nreturn result;",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -170,7 +170,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const from=$('建構日總結分析素材').all();\nreturn $input.all().map((i,index)=>{\n const original=from[index]?.json;if(!original)throw new Error('報表原始資料與 Gemini 回傳數量不一致');\n let obj={};try{obj=JSON.parse(String(i.json.candidates?.[0]?.content?.parts?.[0]?.text??'').replace(/^```(?:json)?\\s*/i,'').replace(/```\\s*$/,'').trim())}catch(e){throw new Error('總結 AI JSON 解析失敗：'+e.message)}\n let draft=String(obj.ai_client_draft??'');\n const unsafe=/(符合.{0,30}目標|達成率|達標|落實|感受身體|全部.{0,10}達|每天.{0,20}都|連續.{0,15}攝取|達成.{0,15}目標|成功達|已達標|專屬營養輔助 AI)/.test(draft);\n const period=original.report_date||String(original.week_start)+' 至 '+String(original.week_end);\n const coverage=original.coverage_pct===''?'無法計算':original.coverage_pct+'%';\n const target=original.daily_target_goal_meals||original.goal_target_total;\n const facts=period+'：目前收到 '+original.recorded_meals+' 餐紀錄，約定記錄 '+original.expected_meals+' 餐，記錄覆蓋率 '+coverage+'。教練已核實符合習慣指標的紀錄有 '+original.verified_goal_yes+' 餐；'+(original.goal_achievement_pct===''?'目前無法判定目標進度。':'相對設定的 '+target+' 餐目標，可核實進度為 '+original.goal_achievement_pct+'%。')+'未記錄或未核實的部分仍屬未知，這不是減脂或健康成果評分。';\n if(unsafe)draft='接下來可以從方便記錄的一餐開始，補充食物內容、實際份量及是否吃完；我們會依你的個人目標一起調整。';\n obj.ai_client_draft=facts+'\\n\\n'+draft;\n obj.coach_summary='[系統核對數據] '+facts+'\\n[AI 草稿，需人工核實] '+String(obj.coach_summary??'')+(unsafe?'\\n[輸出檢查] 客戶草稿中的過度肯定敘述已替換。':'');\n const {requestBody,...meta}=original;\n // 預設不寫入；準備好後由教練明確設定為 false。\n const PREVIEW_ONLY=true;\n return {json:{...meta,coach_summary:String(obj.coach_summary??''),ai_client_draft:String(obj.ai_client_draft??''),approved_text:'',review_status:'待教練審核',manually_replied_at:'',created_at:new Date().toISOString(),allow_write:!PREVIEW_ONLY}};\n});",
+        "jsCode": "// Shared source embedded into exported Code nodes by scripts/harden-workflows.cjs.\nfunction validateGeminiResponse(response, kind) {\n  const fail = code => { throw new Error('AI_RESPONSE_REJECTED: ' + code + '; no draft was written'); };\n  if (!response || response.error || response.promptFeedback?.blockReason) fail('BLOCKED_OR_ERROR');\n  if (!Array.isArray(response.candidates) || response.candidates.length !== 1) fail('CANDIDATE_COUNT');\n  const candidate = response.candidates[0];\n  if (candidate.finishReason !== 'STOP') fail('INCOMPLETE_RESPONSE');\n  const parts = candidate.content?.parts;\n  if (!Array.isArray(parts) || parts.length !== 1 || typeof parts[0].text !== 'string' || parts[0].thought === true) fail('TEXT_REQUIRED');\n  if (parts[0].text.length > 24000) fail('RESPONSE_TOO_LARGE');\n  const text = parts[0].text.trim().replace(/^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i, '$1');\n  let data;\n  try { data = JSON.parse(text); } catch { fail('INVALID_JSON'); }\n  const fields = kind === 'meal'\n    ? ['observed_foods','goal_alignment','ai_coach_assessment','missing_info','ai_client_draft','issue_flags']\n    : ['coach_summary','ai_client_draft'];\n  if (!data || typeof data !== 'object' || Array.isArray(data)) fail('OBJECT_REQUIRED');\n  if (Object.keys(data).length !== fields.length || Object.keys(data).some(k => !fields.includes(k))) fail('UNEXPECTED_FIELDS');\n  for (const field of fields) {\n    if (!Object.prototype.hasOwnProperty.call(data, field) || typeof data[field] !== 'string') fail('FIELD_TYPE');\n    if (data[field].length > 4000 || /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/.test(data[field])) fail('FIELD_CONTENT');\n    if (!['missing_info','issue_flags'].includes(field) && !data[field].trim()) fail('EMPTY_FIELD');\n  }\n  return data;\n}\n// END SHARED RESPONSE VALIDATOR\nconst from=$('建構日總結分析素材').all();\nreturn $input.all().map((i,index)=>{\n const original=from[index]?.json;if(!original)throw new Error('報表原始資料與 Gemini 回傳數量不一致');\n const obj=validateGeminiResponse(i.json,'summary');\n let draft=String(obj.ai_client_draft??'');\n const unsafe=/(符合.{0,30}目標|達成率|達標|落實|感受身體|全部.{0,10}達|每天.{0,20}都|連續.{0,15}攝取|達成.{0,15}目標|成功達|已達標|專屬營養輔助 AI)/.test(draft);\n const period=original.report_date||String(original.week_start)+' 至 '+String(original.week_end);\n const coverage=original.coverage_pct===''?'無法計算':original.coverage_pct+'%';\n const target=original.daily_target_goal_meals||original.goal_target_total;\n const facts=period+'：目前收到 '+original.recorded_meals+' 餐紀錄，約定記錄 '+original.expected_meals+' 餐，記錄覆蓋率 '+coverage+'。教練已核實符合習慣指標的紀錄有 '+original.verified_goal_yes+' 餐；'+(original.goal_achievement_pct===''?'目前無法判定目標進度。':'相對設定的 '+target+' 餐目標，可核實進度為 '+original.goal_achievement_pct+'%。')+'未記錄或未核實的部分仍屬未知，這不是減脂或健康成果評分。';\n if(unsafe)draft='接下來可以從方便記錄的一餐開始，補充食物內容、實際份量及是否吃完；我們會依你的個人目標一起調整。';\n obj.ai_client_draft=facts+'\\n\\n'+draft;\n obj.coach_summary='[系統核對數據] '+facts+'\\n[AI 草稿，需人工核實] '+String(obj.coach_summary??'')+(unsafe?'\\n[輸出檢查] 客戶草稿中的過度肯定敘述已替換。':'');\n const {requestBody,...meta}=original;\n // 預設不寫入；準備好後由教練明確設定為 false。\n const PREVIEW_ONLY=true;\n return {json:{...meta,coach_summary:String(obj.coach_summary??''),ai_client_draft:String(obj.ai_client_draft??''),approved_text:'',review_status:'待教練審核',manually_replied_at:'',created_at:new Date().toISOString(),allow_write:!PREVIEW_ONLY}};\n});",
         "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
@@ -217,223 +217,19 @@
     },
     {
       "parameters": {
-        "documentId": {
-          "__rl": true,
-          "value": "YOUR_SPREADSHEET_ID",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Daily_Summaries",
-          "mode": "name"
-        },
-        "operation": "append",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "summary_id": "={{ $json.summary_id }}",
-            "client_id": "={{ $json.client_id }}",
-            "report_date": "={{ $json.report_date }}",
-            "course_week": "={{ $json.course_week }}",
-            "goal_text": "={{ $json.goal_text }}",
-            "expected_meals": "={{ $json.expected_meals }}",
-            "recorded_meals": "={{ $json.recorded_meals }}",
-            "coverage_pct": "={{ $json.coverage_pct }}",
-            "daily_target_goal_meals": "={{ $json.daily_target_goal_meals }}",
-            "verified_goal_yes": "={{ $json.verified_goal_yes }}",
-            "verified_goal_no": "={{ $json.verified_goal_no }}",
-            "goal_achievement_pct": "={{ $json.goal_achievement_pct }}",
-            "metric_note": "={{ $json.metric_note }}",
-            "coach_summary": "={{ $json.coach_summary }}",
-            "ai_client_draft": "={{ $json.ai_client_draft }}",
-            "approved_text": "={{ $json.approved_text }}",
-            "review_status": "={{ $json.review_status }}",
-            "manually_replied_at": "={{ $json.manually_replied_at }}",
-            "created_at": "={{ $json.created_at }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "summary_id",
-              "displayName": "summary_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "client_id",
-              "displayName": "client_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "report_date",
-              "displayName": "report_date",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "course_week",
-              "displayName": "course_week",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "goal_text",
-              "displayName": "goal_text",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "expected_meals",
-              "displayName": "expected_meals",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "recorded_meals",
-              "displayName": "recorded_meals",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "coverage_pct",
-              "displayName": "coverage_pct",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "daily_target_goal_meals",
-              "displayName": "daily_target_goal_meals",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "verified_goal_yes",
-              "displayName": "verified_goal_yes",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "verified_goal_no",
-              "displayName": "verified_goal_no",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "goal_achievement_pct",
-              "displayName": "goal_achievement_pct",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "metric_note",
-              "displayName": "metric_note",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "coach_summary",
-              "displayName": "coach_summary",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "ai_client_draft",
-              "displayName": "ai_client_draft",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "approved_text",
-              "displayName": "approved_text",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "review_status",
-              "displayName": "review_status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "manually_replied_at",
-              "displayName": "manually_replied_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "method": "POST",
+        "url": "https://YOUR_GATEWAY_HOST.invalid/v1/drafts/Daily_Summaries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({row: {\"summary_id\": $json[\"summary_id\"],\"client_id\": $json[\"client_id\"],\"report_date\": $json[\"report_date\"],\"course_week\": $json[\"course_week\"],\"goal_text\": $json[\"goal_text\"],\"expected_meals\": $json[\"expected_meals\"],\"recorded_meals\": $json[\"recorded_meals\"],\"coverage_pct\": $json[\"coverage_pct\"],\"daily_target_goal_meals\": $json[\"daily_target_goal_meals\"],\"verified_goal_yes\": $json[\"verified_goal_yes\"],\"verified_goal_no\": $json[\"verified_goal_no\"],\"goal_achievement_pct\": $json[\"goal_achievement_pct\"],\"metric_note\": $json[\"metric_note\"],\"coach_summary\": $json[\"coach_summary\"],\"ai_client_draft\": $json[\"ai_client_draft\"],\"approved_text\": $json[\"approved_text\"],\"review_status\": $json[\"review_status\"],\"manually_replied_at\": $json[\"manually_replied_at\"],\"created_at\": $json[\"created_at\"]}}) }}",
         "options": {
-          "cellFormat": "RAW"
+          "timeout": 120000
         }
       },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2170,
         -80

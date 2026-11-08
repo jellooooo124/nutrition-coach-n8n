@@ -15,3 +15,50 @@ jobs:
         with:
           node-version: '22'
       - run: npm test
+  gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r service/requirements.txt pytest==9.1.1
+      - run: pytest -q service/tests
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: disposable-test-only
+          POSTGRES_DB: nutrition_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d nutrition_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r service/requirements.txt pytest==9.1.1
+      - run: pytest -q service/tests
+        env:
+          PG_TEST_URL: postgresql://test:disposable-test-only@localhost:5432/nutrition_test
+  n8n-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import all four workflows into disposable n8n 2.20.0
+        run: |
+          docker run --rm --security-opt no-new-privileges:true \
+            -e N8N_DIAGNOSTICS_ENABLED=false \
+            -e N8N_PERSONALIZATION_ENABLED=false \
+            -v "${PWD}/workflows:/workflows:ro" \
+            docker.n8n.io/n8nio/n8n:2.20.0 \
+            import:workflow --separate --input=/workflows
