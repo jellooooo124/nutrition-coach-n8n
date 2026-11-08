@@ -96,3 +96,18 @@ pytest -q service/tests
 - 去重保護的是草稿寫入。兩個同時開始的 workflow 仍可能各呼叫一次 Gemini；未宣稱模型請求 exactly-once，也未新增正式的錯誤通知／值班服務。
 - 檢查 JSON schema 不等於確認營養資訊正確，既有保守文字檢查與人工審核仍必要。
 - 回復時先停用新版排程，保留 DB、密鑰、Sheets 與 workflow 備份，再恢復舊版本；舊版原本的併發風險會重新出現，不要兩版並行。
+
+## 本機 n8n：不用部署雲端服務
+
+若 n8n 直接在同一台電腦執行，可使用本機 SQLite（持久檔案）與 loopback HTTP。保留同一個資料庫與金鑰；不支援多台主機共用 SQLite。Docker 裡的 localhost 不等於主機，此段不適用容器。
+
+```sh
+python -m uvicorn service.app:from_env --factory --host 127.0.0.1 --port 8787 --env-file .local/gateway.env
+npm run configure -- YOUR_SPREADSHEET_ID YOUR_INTAKE_GID http://127.0.0.1:8787
+```
+
+匯入前備份原流程，以新 ID 與名稱建立未啟用副本，綁定既有讀取／Gemini 憑證，以及獨立的 Gateway Header Auth。先保持預覽開啟。舊排程與新版不可同時寫入；正式切換前先停止舊排程。電腦休眠、關機或服務停止時，這套本機流程無法執行；服務並未自動安裝為登入啟動項目。
+
+### 2026-11-08 本機安裝驗證紀錄
+
+在使用者的 n8n 2.30.0 以新 ID 匯入四份未啟用、預覽開啟的流程副本，保留舊版。另以 n8n 實際執行唯讀 HTTP Request，使用獨立 Header Auth 呼叫本機 `/v1/jobs`，成功取得空任務清單。服務帳號先前已通過四個測試分頁的真實讀取與欄名核對。這些證據只證明安裝、驗證與讀取路徑，尚未完成新版 Gemini、Sheets 寫入、補跑的整體 live 驗收。Neon 資料庫未接入本次單機測試。

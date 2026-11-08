@@ -71,7 +71,8 @@ test('configuration binds HTTPS gateway and sheet IDs without activating workflo
       assert.equal(JSON.parse(raw).active, false);
       assert.ok(raw.includes('https://gateway.example.com/v1/drafts/'));
     }
-    for (const url of ['http://gateway.example.com', 'https://user:secret@gateway.example.com', 'https://gateway.example.com/path']) {
+    assert.equal(cp.spawnSync(process.execPath, [...args.slice(0,3), 'http://127.0.0.1:8787']).status, 0);
+    for (const url of ['http://gateway.example.com', 'https://user:secret@gateway.example.com', 'https://gateway.example.com/path', 'http://192.168.1.2:8787', 'http://127.0.0.1.evil.example']) {
       assert.notEqual(cp.spawnSync(process.execPath, [...args.slice(0,3),url]).status, 0);
     }
   } finally { fs.rmSync(temp, {recursive:true, force:true}); }

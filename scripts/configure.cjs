@@ -7,7 +7,8 @@ if (!/^[A-Za-z0-9_-]{20,}$/.test(sheetId || '') || !/^\d+$/.test(intakeGid || ''
 }
 let gateway;
 try { gateway = new URL(gatewayUrl); } catch { throw Error('Supply the deployed HTTPS gateway URL as the third argument'); }
-if (gateway.protocol !== 'https:' || gateway.username || gateway.password || gateway.search || gateway.hash || gateway.pathname !== '/' || gateway.hostname.endsWith('.invalid')) throw Error('Use a trusted HTTPS origin without credentials or paths');
+const localOnly = gateway.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(gateway.hostname);
+if ((!localOnly && gateway.protocol !== 'https:') || gateway.username || gateway.password || gateway.search || gateway.hash || gateway.pathname !== '/' || gateway.hostname.endsWith('.invalid')) throw Error('Use HTTPS (or HTTP loopback for a same-host service), without credentials or paths');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, '.local', 'workflows');
 fs.mkdirSync(out, { recursive: true });
